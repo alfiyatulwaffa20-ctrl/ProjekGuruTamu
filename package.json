@@ -1,0 +1,43 @@
+{
+  "name": "tefa-studio",
+  "version": "1.0.0",
+  "description": "Sistem Teaching Factory dan manajemen order jasa industri SMK",
+  "main": "src/server.js",
+  "scripts": {
+    "predev": "npm run css:build",
+    "dev": "nodemon src/server.js",
+    "prestart": "npm run css:build",
+    "start": "node src/server.js",
+    "css:build": "tailwindcss -i src/tailwind.css -o public/css/tailwind.css --minify",
+    "prisma:generate": "prisma generate",
+    "prisma:push": "prisma db push",
+    "prisma:studio": "prisma studio",
+    "seed": "node prisma/seed.js",
+    "db:setup": "prisma db push && node prisma/seed.js"
+  },
+  "keywords": [
+    "nodejs",
+    "express",
+    "ejs",
+    "prisma",
+    "sqlite",
+    "smk-telkom-lampung",
+    "teaching-factory"
+  ],
+  "author": "Muhammad Fari Madyan, S.Kom (Lampung Dev)",
+  "license": "MIT",
+  "dependencies": {
+    "@prisma/client": "^6.4.1",
+    "bcryptjs": "^3.0.3",
+    "dotenv": "^16.4.7",
+    "ejs": "^3.1.10",
+    "express": "^4.21.2",
+    "express-session": "^1.19.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.3.3",
+    "nodemon": "^3.1.9",
+    "prisma": "^6.4.1",
+    "tailwindcss": "^4.3.3"
+  }
+}

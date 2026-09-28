@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f6f1">
+  <title><%= title %> | TeFa Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/tailwind.css">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="app-shell min-h-screen">
+  <aside class="sidebar">
+    <a class="brand" href="/"><span class="brand-mark">T<span>.</span></span><span><b>tefa studio</b><small>UNIT PRODUKSI SEKOLAH</small></span></a>
+    <div class="side-label">WORKSPACE</div>
+    <a class="side-link active" href="/"><span>▦</span> Ringkasan <kbd>01</kbd></a>
+    <% if (currentUser.role === 'ADMIN') { %>
+      <a class="side-link" href="#services"><span>◫</span> Katalog layanan</a>
+      <a class="side-link" href="#revenue"><span>↗</span> Omset & bagi hasil</a>
+    <% } %>
+    <% if (currentUser.role === 'PROJECT_MANAGER') { %>
+      <a class="side-link" href="#new-order"><span>＋</span> Order masuk</a>
+      <a class="side-link" href="#orders"><span>◉</span> Review proyek</a>
+    <% } %>
+    <% if (currentUser.role === 'SISWA_TEKNISI') { %>
+      <a class="side-link" href="#my-tasks"><span>▤</span> Tiket saya</a>
+      <a class="side-link" href="#honor"><span>◇</span> Honorarium</a>
+    <% } %>
+    <div class="sidebar-bottom">
+      <div class="profile-chip"><span class="avatar"><%= currentUser.nama.slice(0, 1).toUpperCase() %></span><span><b><%= currentUser.nama %></b><small><%= roleLabel %></small></span></div>
+      <form action="/logout" method="post"><button class="logout" type="submit">↗ Keluar dari workspace</button></form>
+      <div class="sidebar-foot">SMK TELKOM LAMPUNG <span>•</span> 2026</div>
+    </div>
+  </aside>
+  <main class="main-area">
+    <header class="topbar"><div><span class="breadcrumb">UNIT PRODUKSI <span>/</span> <%= roleLabel.toUpperCase() %></span><h1><%= title.split(' • ')[0] %></h1></div><div class="topbar-right"><span class="live-dot"></span> Sistem aktif <span class="top-date"><%= new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) %></span></div></header>
+    <div class="content">
+      <% if (notice) { %><div class="notice"><span>✓</span><%= notice %></div><% } %>

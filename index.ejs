@@ -1,0 +1,143 @@
+<%- include('../partials/header') %>
+
+<div class="page-header">
+  <div class="page-title">
+    <h2>📋 Cek Sewaan & Pengembalian Busana</h2>
+    <p>Pantau seluruh status persewaan: Booking, Sedang Diambil, Selesai, dan Riwayat Transaksi.</p>
+  </div>
+  <div>
+    <a href="/rentals/new" class="btn btn-primary">
+      ➕ Transaksi Sewa Baru
+    </a>
+  </div>
+</div>
+
+<!-- Filter & Search Bar -->
+<form action="/rentals" method="GET" class="filter-bar">
+  <input 
+    type="text" 
+    name="search" 
+    class="search-input" 
+    placeholder="🔍 Cari kode transaksi (SE-...) atau nama penyewa..." 
+    value="<%= query.search %>"
+  >
+
+  <select name="status" onchange="this.form.submit()">
+    <option value="ALL" <%= query.status === 'ALL' ? 'selected' : '' %>>Semua Status Sewa</option>
+    <option value="BOOKING" <%= query.status === 'BOOKING' ? 'selected' : '' %>>📌 Booking (Belum Diambil)</option>
+    <option value="DIAMBIL" <%= query.status === 'DIAMBIL' ? 'selected' : '' %>>👘 Sedang Diambil (Disewa)</option>
+    <option value="SELESAI" <%= query.status === 'SELESAI' ? 'selected' : '' %>>✅ Selesai Dikembalikan</option>
+    <option value="BATAL" <%= query.status === 'BATAL' ? 'selected' : '' %>>❌ Dibatalkan</option>
+  </select>
+
+  <button type="submit" class="btn btn-secondary btn-sm">Filter</button>
+  <% if (query.search || query.status !== 'ALL') { %>
+    <a href="/rentals" class="btn btn-sm" style="color: var(--text-dark);">Reset</a>
+  <% } %>
+</form>
+
+<!-- Table of Rentals -->
+<div class="card">
+  <div class="card-header">
+    <h3 class="card-title">
+      <span>Daftar Transaksi (<%= rentals.length %> Data)</span>
+    </h3>
+  </div>
+
+  <div class="table-responsive">
+    <table>
+      <thead>
+        <tr>
+          <th>Kode Transaksi</th>
+          <th>Penyewa & Kontak</th>
+          <th>Busana yang Disewa</th>
+          <th>Jadwal Sewa</th>
+          <th>Total & Sisa Bayar</th>
+          <th>Jaminan</th>
+          <th>Status Sewa</th>
+          <th style="text-align: right;">Aksi</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% if (rentals.length === 0) { %>
+          <tr>
+            <td colspan="8" style="text-align: center; color: var(--text-dark); padding: 2.5rem;">
+              Tidak ada data transaksi persewaan yang ditemukan.
+            </td>
+          </tr>
+        <% } else { %>
+          <% rentals.forEach((r) => { %>
+            <tr>
+              <td>
+                <span class="badge-code"><%= r.transactionCode %></span>
+                <% if (r.isOverdue) { %>
+                  <div style="margin-top: 4px;">
+                    <span class="badge-overdue">⚠️ TELAT KEMBALI</span>
+                  </div>
+                <% } %>
+              </td>
+              <td>
+                <strong style="color: var(--text-main);"><%= r.customer.name %></strong>
+                <div style="font-size: 0.78rem; color: var(--text-muted);"><%= r.customer.phone %></div>
+                <% if (r.customer.address) { %>
+                  <div style="font-size: 0.74rem; color: var(--text-muted); max-width: 200px;"><%= r.customer.address %></div>
+                <% } %>
+              </td>
+              <td>
+                <% r.rentalItems.forEach((ri) => { %>
+                  <div style="margin-bottom: 2px;">
+                    • <strong><%= ri.item.name %></strong> <span style="color: var(--text-muted); font-size: 0.8rem;">(<%= ri.item.code %>, <%= ri.item.size %>)</span>
+                  </div>
+                <% }) %>
+                <% if (r.fittingNotes) { %>
+                  <div style="font-size: 0.74rem; color: #b45309; margin-top: 3px; font-style: italic;">
+                    Fitting: "<%= r.fittingNotes %>"
+                  </div>
+                <% } %>
+              </td>
+              <td style="font-size: 0.82rem; white-space: nowrap;">
+                <div>Ambil (H-1): <strong><%= formatDate(r.pickupDate) %></strong></div>
+                <div>Hari H: <span style="color: #0284c7; font-weight: 600;"><%= formatDate(r.eventDate) %></span></div>
+                <div>Kembali (H+1): <strong style="<%= r.isOverdue ? 'color: #dc2626;' : '' %>"><%= formatDate(r.returnDate) %></strong></div>
+              </td>
+              <td>
+                <div>Total: <strong><%= formatRupiah(r.finalPrice) %></strong></div>
+                <div>Bayar: <span style="color: #059669; font-weight: 600;"><%= formatRupiah(r.paidAmount) %></span></div>
+                <% if (r.remainingAmount > 0) { %>
+                  <div style="color: #dc2626; font-weight: 700; font-size: 0.82rem;">
+                    Sisa: <%= formatRupiah(r.remainingAmount) %> (<%= r.paymentType %>)
+                  </div>
+                <% } else { %>
+                  <span class="badge badge-available" style="margin-top: 3px;">LUNAS</span>
+                <% } %>
+              </td>
+              <td>
+                <span style="font-size: 0.82rem; background: #f1f5f9; color: #334155; border: 1px solid #e2e8f0; padding: 2px 6px; border-radius: 4px; font-weight: 600;">
+                  🪪 <%= r.customerGuarantee %>
+                </span>
+              </td>
+              <td>
+                <% if (r.rentalStatus === 'BOOKING') { %>
+                  <span class="badge badge-booking">📌 BOOKING</span>
+                <% } else if (r.rentalStatus === 'DIAMBIL') { %>
+                  <span class="badge badge-diambil">👘 DIAMBIL</span>
+                <% } else if (r.rentalStatus === 'SELESAI') { %>
+                  <span class="badge badge-selesai">✅ SELESAI</span>
+                <% } else { %>
+                  <span class="badge badge-batal">❌ BATAL</span>
+                <% } %>
+              </td>
+              <td style="text-align: right; white-space: nowrap;">
+                <a href="/rentals/<%= r.id %>" class="btn btn-secondary btn-sm">
+                  🔍 Nota & Aksi
+                </a>
+              </td>
+            </tr>
+          <% }) %>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<%- include('../partials/footer') %>

@@ -1,0 +1,509 @@
+<%- include('../partials/header') %>
+
+<div class="page-header no-print">
+  <div class="page-title">
+    <h2>Nota Persewaan #<%= rental.transactionCode %></h2>
+    <p>Rincian data transaksi, cetak struk thermal kasir, dan invoice bukti sewa.</p>
+  </div>
+  <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center;">
+    <!-- Switcher Format Struk Thermal vs Faktur A4 -->
+    <div class="receipt-mode-toggle">
+      <button type="button" id="btnModeThermal" onclick="setReceiptMode('thermal')" class="mode-btn active">
+        🧾 Struk Thermal (Bluetooth)
+      </button>
+      <button type="button" id="btnModeStandard" onclick="setReceiptMode('standard')" class="mode-btn">
+        📄 Faktur Lebar (A4)
+      </button>
+    </div>
+
+    <!-- Pilihan Lebar Kertas Thermal (58mm vs 80mm) -->
+    <div id="thermalWidthControl" class="thermal-width-control">
+      <label for="thermalWidthSelect">Lebar Kertas:</label>
+      <select id="thermalWidthSelect" onchange="changeReceiptWidth(this.value)">
+        <option value="width-80mm" selected>80 mm (Standar POS)</option>
+        <option value="width-58mm">58 mm (Mini Bluetooth)</option>
+      </select>
+    </div>
+
+    <button onclick="printInvoice()" class="btn btn-primary">
+      🖨️ Cetak Struk
+    </button>
+    <a href="/rentals" class="btn btn-secondary">
+      ⬅️ Kembali ke Daftar
+    </a>
+  </div>
+</div>
+
+<% if (typeof success !== 'undefined' && success) { %>
+  <div class="alert alert-success no-print">
+    ✅ <%= success %>
+  </div>
+<% } %>
+
+<!-- Action Panel Kasir (Di luar cetakan) -->
+<div class="card no-print" style="background: #f0f9ff; border: 1px solid #bae6fd;">
+  <div class="card-header" style="border-bottom-color: #bae6fd;">
+    <h3 class="card-title" style="color: #0369a1;">
+      <span>⚙️ Tindakan Operasional Kasir (Status: <%= rental.rentalStatus %>)</span>
+    </h3>
+  </div>
+
+  <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;">
+    <!-- 1. Ambil Busana jika masih BOOKING -->
+    <% if (rental.rentalStatus === 'BOOKING') { %>
+      <form action="/rentals/<%= rental.id %>/status" method="POST">
+        <input type="hidden" name="action" value="AMBIL">
+        <button type="submit" class="btn btn-success" onclick="return confirm('Konfirmasi: Pelanggan telah mengambil busana di toko pada H-1?')">
+          👘 Konfirmasi Pengambilan Busana (H-1)
+        </button>
+      </form>
+    <% } %>
+
+    <!-- 2. Pelunasan jika masih ada sisa piutang -->
+    <% if (rental.remainingAmount > 0 && rental.rentalStatus !== 'BATAL') { %>
+      <form action="/rentals/<%= rental.id %>/status" method="POST">
+        <input type="hidden" name="action" value="PELUNASAN">
+        <button type="submit" class="btn btn-primary" onclick="return confirm('Konfirmasi: Pelanggan melunasi sisa tagihan <%= formatRupiah(rental.remainingAmount) %>?')">
+          💵 Lunasi Sisa Tagihan (<%= formatRupiah(rental.remainingAmount) %>)
+        </button>
+      </form>
+    <% } %>
+
+    <!-- 3. Pengembalian Selesai jika DIAMBIL -->
+    <% if (rental.rentalStatus === 'DIAMBIL') { %>
+      <form action="/rentals/<%= rental.id %>/status" method="POST" style="display: flex; gap: 0.5rem; align-items: center;">
+        <input type="hidden" name="action" value="SELESAI">
+        <input type="number" name="penaltyFee" class="form-control" placeholder="Denda Telat (Rp)" value="0" min="0" step="5000" style="width: 160px; padding: 0.5rem;">
+        <button type="submit" class="btn btn-success" onclick="return confirm('Konfirmasi: Busana telah dikembalikan dengan lengkap & baik?')">
+          ✅ Pengembalian Selesai (H+1)
+        </button>
+      </form>
+    <% } %>
+
+    <!-- 4. Batalkan jika BOOKING -->
+    <% if (rental.rentalStatus === 'BOOKING') { %>
+      <form action="/rentals/<%= rental.id %>/status" method="POST">
+        <input type="hidden" name="action" value="BATAL">
+        <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Yakin ingin membatalkan transaksi ini? Stok busana akan otomatis kembali tersedia.')">
+          ❌ Batalkan Transaksi
+        </button>
+      </form>
+    <% } %>
+  </div>
+</div>
+
+<!-- ==========================================================
+     KONTROL PRINTER BLUETOOTH & STATUS KONEKSI (No Print)
+     ========================================================== -->
+<div class="card bluetooth-control-card no-print">
+  <div class="bt-card-header">
+    <div class="bt-header-left">
+      <div class="bt-icon-badge">📶</div>
+      <div>
+        <h3 class="bt-title">Koneksi Printer Thermal Bluetooth</h3>
+        <p class="bt-subtitle">Cetak langsung struk ke printer thermal portable (Panda, Eppos, Iware, Zywell, dll) via Web Bluetooth.</p>
+      </div>
+    </div>
+    <div class="bt-header-status">
+      <div id="btStatusDot" class="status-dot status-disconnected"></div>
+      <span id="btStatusText" class="bt-status-text">Belum Terkoneksi (Siap Pairing)</span>
+    </div>
+  </div>
+
+  <!-- Tombol Aksi Bluetooth -->
+  <div class="bt-action-row">
+    <button type="button" id="btnConnectBt" onclick="connectAndPrintBluetooth()" class="btn btn-bluetooth">
+      <span class="btn-icon">📶</span> Hubungkan & Cetak Bluetooth
+    </button>
+    <button type="button" id="btnPrintBtDirect" onclick="printToConnectedBluetooth()" class="btn btn-success" style="display: none;">
+      <span class="btn-icon">🖨️</span> Kirim Struk ke Bluetooth
+    </button>
+    <button type="button" id="btnDisconnectBt" onclick="disconnectBluetooth()" class="btn btn-secondary btn-sm" style="display: none;">
+      🔌 Putuskan Koneksi
+    </button>
+    <button type="button" onclick="printInvoice()" class="btn btn-secondary" title="Gunakan dialog print sistem operasi / browser">
+      🖨️ Cetak Standar (Browser/USB)
+    </button>
+    <button type="button" onclick="simulateBluetoothPrint()" class="btn btn-outline-info btn-sm" title="Mode demo simulasi untuk presentasi/pengujian tanpa printer fisik">
+      🧪 Demo Simulasi Cetak
+    </button>
+  </div>
+
+  <!-- Dynamic Alert Box for Connection & Printing Feedback -->
+  <div id="btAlertBox" class="bt-alert" style="display: none;">
+    <div id="btAlertIcon" class="bt-alert-icon">ℹ️</div>
+    <div id="btAlertMessage" class="bt-alert-message"></div>
+  </div>
+</div>
+
+<!-- ==========================================================
+     1. FORMAT STRUK THERMAL BLUETOOTH (Default Print Target)
+     ========================================================== -->
+<div id="thermalReceiptWrapper" class="thermal-receipt-container">
+  <div id="thermalReceipt" class="thermal-receipt width-80mm">
+    <!-- Header Toko -->
+    <div class="thermal-header">
+      <div class="thermal-logo">👘 SEWA AJA</div>
+      <div class="thermal-subtitle">PERSEWAAN KEBAYA & JAS</div>
+      <div class="thermal-store-info">
+        SMK TELKOM LAMPUNG<br>
+        Jl. Raya Gisting, Tanggamus, Lampung<br>
+        WhatsApp: 0812-7890-0000
+      </div>
+    </div>
+
+    <div class="thermal-divider-double"></div>
+
+    <!-- Metadata Nota -->
+    <div class="thermal-row">
+      <span class="thermal-label">NO. NOTA</span>
+      <span class="thermal-val thermal-bold"><%= rental.transactionCode %></span>
+    </div>
+    <div class="thermal-row">
+      <span class="thermal-label">TANGGAL</span>
+      <span class="thermal-val"><%= formatDate(rental.createdAt) %></span>
+    </div>
+    <div class="thermal-row">
+      <span class="thermal-label">KASIR</span>
+      <span class="thermal-val"><%= rental.cashierName %></span>
+    </div>
+    <div class="thermal-row">
+      <span class="thermal-label">BAYAR</span>
+      <span class="thermal-val thermal-bold">[ <%= rental.paymentType %> ]</span>
+    </div>
+    <div class="thermal-row">
+      <span class="thermal-label">STATUS SEWA</span>
+      <span class="thermal-val thermal-bold"><%= rental.rentalStatus %></span>
+    </div>
+
+    <div class="thermal-divider-dashed"></div>
+
+    <!-- Data Penyewa & Jaminan -->
+    <div class="thermal-section-heading">DATA PENYEWA:</div>
+    <div class="thermal-row">
+      <span class="thermal-label">Nama</span>
+      <span class="thermal-val thermal-bold"><%= rental.customer.name %></span>
+    </div>
+    <div class="thermal-row">
+      <span class="thermal-label">WhatsApp</span>
+      <span class="thermal-val"><%= rental.customer.phone %></span>
+    </div>
+    <div class="thermal-row">
+      <span class="thermal-label">Jaminan</span>
+      <span class="thermal-val thermal-bold"><%= rental.customerGuarantee %> (<%= rental.customer.idCardNumber || 'Disimpan Toko' %>)</span>
+    </div>
+
+    <div class="thermal-divider-dashed"></div>
+
+    <!-- Jadwal Siklus H-1 / Hari H / H+1 -->
+    <div class="thermal-section-heading">JADWAL PEMAKAIAN BUSANA:</div>
+    <div class="thermal-row">
+      <span class="thermal-label">• Ambil/Fitting (H-1)</span>
+      <span class="thermal-val"><%= formatDate(rental.pickupDate) %></span>
+    </div>
+    <div class="thermal-row">
+      <span class="thermal-label">• Hari H (Acara)</span>
+      <span class="thermal-val thermal-bold"><%= formatDate(rental.eventDate) %></span>
+    </div>
+    <div class="thermal-row">
+      <span class="thermal-label">• Batas Pulang (H+1)</span>
+      <span class="thermal-val thermal-bold" style="<%= isOverdue ? 'text-decoration: underline;' : '' %>"><%= formatDate(rental.returnDate) %></span>
+    </div>
+
+    <div class="thermal-divider-dashed"></div>
+
+    <!-- Rincian Busana POS -->
+    <div class="thermal-section-heading">RINCIAN BUSANA:</div>
+    <div class="thermal-items-list">
+      <% rental.rentalItems.forEach((ri, idx) => { %>
+        <div class="thermal-item-entry">
+          <div class="thermal-item-title"><%= idx + 1 %>. <%= ri.item.name %></div>
+          <div class="thermal-item-sub">
+            <span>[<%= ri.item.code %>] Uk. <%= ri.item.size %> (1x)</span>
+            <span class="thermal-bold"><%= formatRupiah(ri.priceAtRent) %></span>
+          </div>
+          <% if (ri.itemCustomNote) { %>
+            <div class="thermal-item-note">Note: <%= ri.itemCustomNote %></div>
+          <% } %>
+        </div>
+      <% }) %>
+    </div>
+
+    <div class="thermal-divider-dashed"></div>
+
+    <!-- Perhitungan Finansial -->
+    <div class="thermal-row">
+      <span class="thermal-label">Total Tarif Busana</span>
+      <span class="thermal-val"><%= formatRupiah(rental.totalBasePrice) %></span>
+    </div>
+    <% if (rental.additionalCharge > 0) { %>
+      <div class="thermal-row">
+        <span class="thermal-label">Biaya Tambahan / Charge</span>
+        <span class="thermal-val">+<%= formatRupiah(rental.additionalCharge) %></span>
+      </div>
+    <% } %>
+    <% if (rental.discount > 0) { %>
+      <div class="thermal-row">
+        <span class="thermal-label">Diskon Promo</span>
+        <span class="thermal-val">-<%= formatRupiah(rental.discount) %></span>
+      </div>
+    <% } %>
+
+    <div class="thermal-divider-dashed"></div>
+
+    <div class="thermal-row thermal-total-row">
+      <span class="thermal-bold">TOTAL TAGIHAN</span>
+      <span class="thermal-bold thermal-total-val"><%= formatRupiah(rental.finalPrice) %></span>
+    </div>
+
+    <div class="thermal-row">
+      <span class="thermal-label">Sudah Dibayar (<%= rental.paymentMethod %>)</span>
+      <span class="thermal-val thermal-bold"><%= formatRupiah(rental.paidAmount) %></span>
+    </div>
+
+    <div class="thermal-row thermal-remaining-row">
+      <span class="thermal-bold">SISA PIUTANG</span>
+      <span class="thermal-bold thermal-remaining-val"><%= formatRupiah(rental.remainingAmount) %></span>
+    </div>
+
+    <% if (rental.penaltyFee > 0) { %>
+      <div class="thermal-row">
+        <span class="thermal-label">Denda Telat Pengembalian</span>
+        <span class="thermal-val thermal-bold">+<%= formatRupiah(rental.penaltyFee) %></span>
+      </div>
+    <% } %>
+
+    <!-- Catatan Vermak Ukuran jika ada -->
+    <% if (rental.fittingNotes) { %>
+      <div class="thermal-divider-dashed"></div>
+      <div class="thermal-vermak-box">
+        <div class="thermal-vermak-title">✂️ CATATAN VERMAK / UKURAN:</div>
+        <div class="thermal-vermak-content">"<%= rental.fittingNotes %>"</div>
+      </div>
+    <% } %>
+
+    <div class="thermal-divider-dashed"></div>
+
+    <!-- Ketentuan Operasional Singkat -->
+    <div class="thermal-rules">
+      <div class="thermal-rules-title">KETENTUAN PERSEWAAN:</div>
+      <div>1. Wajib kembali H+1 maksimal pukul 17.00 WIB.</div>
+      <div>2. Keterlambatan dikenakan denda Rp 25.000/hari/busana.</div>
+      <div>3. Jaminan fisik dikembalikan setelah busana dicek lengkap.</div>
+      <div>4. Simpan struk ini sebagai bukti sah pengambilan jaminan.</div>
+    </div>
+
+    <div class="thermal-divider-dashed"></div>
+
+    <!-- Tanda Tangan Kasir & Penyewa -->
+    <div class="thermal-signatures">
+      <div class="thermal-sig-box">
+        <div>Penyewa,</div>
+        <div class="thermal-sig-space"></div>
+        <div class="thermal-sig-name">( <%= rental.customer.name.substring(0, 16) %> )</div>
+      </div>
+      <div class="thermal-sig-box">
+        <div>Petugas Kasir,</div>
+        <div class="thermal-sig-space"></div>
+        <div class="thermal-sig-name">( <%= rental.cashierName %> )</div>
+      </div>
+    </div>
+
+    <div class="thermal-divider-double"></div>
+
+    <!-- Barcode & Penutup -->
+    <div class="thermal-footer">
+      <div class="thermal-barcode">
+        <div class="barcode-graphic"></div>
+        <div class="barcode-label">* <%= rental.transactionCode %> *</div>
+      </div>
+      <div class="thermal-closing">*** TERIMA KASIH ***</div>
+      <div class="thermal-sub closing-sub">SEWA AJA • SOLUSI BUSANA ANDA</div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ==========================================================
+     2. FORMAT FAKTUR LEBAR STANDAR (A4 Mode - Opsional)
+     ========================================================== -->
+<div id="standardInvoiceWrapper" class="invoice-box" style="display: none;">
+  <div class="invoice-header">
+    <div>
+      <h2>👘 SEWA AJA</h2>
+      <p style="font-weight: 700; color: #475569; font-size: 0.95rem;">Persewaan Busana Tradisional, Kebaya & Jas</p>
+      <p style="font-size: 0.82rem; color: #64748b;">
+        SMK Telkom Lampung • Jl. Raya Gisting, Tanggamus, Lampung<br>
+        WhatsApp: 0812-7890-0000 | Kasir: <%= rental.cashierName %>
+      </p>
+    </div>
+    <div style="text-align: right;">
+      <h3 style="font-size: 1.4rem; color: #0284c7; font-family: 'JetBrains Mono', monospace;"><%= rental.transactionCode %></h3>
+      <p style="font-size: 0.85rem; color: #64748b;">Tanggal Nota: <%= formatDate(rental.createdAt) %></p>
+      <div style="margin-top: 0.4rem;">
+        <span style="display: inline-block; padding: 4px 10px; border-radius: 4px; font-weight: 800; font-size: 0.85rem; background: <%= rental.paymentType === 'LUNAS' ? '#dcfce7; color: #15803d;' : '#fef3c7; color: #b45309;' %>">
+          STATUS BAYAR: <%= rental.paymentType %>
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Info Grid Pelanggan & Jadwal -->
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 1.5rem; font-size: 0.9rem;">
+    <div style="background: #f8fafc; padding: 1rem; border-radius: 6px; border: 1px solid #e2e8f0;">
+      <h4 style="color: #0284c7; margin-bottom: 0.5rem; font-size: 0.95rem;">👤 Data Penyewa</h4>
+      <div><strong>Nama:</strong> <%= rental.customer.name %></div>
+      <div><strong>No. HP/WA:</strong> <%= rental.customer.phone %></div>
+      <div><strong>Alamat:</strong> <%= rental.customer.address || '-' %></div>
+      <div><strong>Jaminan Fisik:</strong> <span style="font-weight: 700; color: #dc2626;"><%= rental.customerGuarantee %> (<%= rental.customer.idCardNumber || 'Tersimpan di Toko' %>)</span></div>
+    </div>
+
+    <div style="background: #f8fafc; padding: 1rem; border-radius: 6px; border: 1px solid #e2e8f0;">
+      <h4 style="color: #0284c7; margin-bottom: 0.5rem; font-size: 0.95rem;">📅 Jadwal Pemakaian Busana</h4>
+      <div><strong>Tanggal Ambil (H-1):</strong> <%= formatDate(rental.pickupDate) %></div>
+      <div><strong>Hari H (Tanggal Acara):</strong> <span style="color: #0284c7; font-weight: 700;"><%= formatDate(rental.eventDate) %></span></div>
+      <div><strong>Batas Kembali (H+1):</strong> <strong style="<%= isOverdue ? 'color: #dc2626;' : '' %>"><%= formatDate(rental.returnDate) %></strong></div>
+      <div><strong>Status Saat Ini:</strong> <strong style="color: #0f172a;"><%= rental.rentalStatus %></strong></div>
+    </div>
+  </div>
+
+  <!-- Catatan Vermak / Ukuran Khusus -->
+  <% if (rental.fittingNotes) { %>
+    <div style="background: #fffbeb; border: 1px solid #fde68a; padding: 0.85rem 1.25rem; border-radius: 6px; margin-bottom: 1.5rem; font-size: 0.88rem;">
+      <strong style="color: #b45309;">✂️ Catatan Fitting & Vermak Ukuran:</strong>
+      <p style="color: #78350f; margin-top: 0.2rem; font-style: italic;"><%= rental.fittingNotes %></p>
+    </div>
+  <% } %>
+
+  <!-- Tabel Busana yang Disewa -->
+  <table class="invoice-table">
+    <thead>
+      <tr>
+        <th style="width: 40px;">No</th>
+        <th>Kode</th>
+        <th>Nama Busana</th>
+        <th>Kategori</th>
+        <th>Ukuran</th>
+        <th style="text-align: right;">Tarif Sewa</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% rental.rentalItems.forEach((ri, idx) => { %>
+        <tr>
+          <td><%= idx + 1 %></td>
+          <td><span style="font-family: monospace; font-weight: 700;"><%= ri.item.code %></span></td>
+          <td>
+            <strong><%= ri.item.name %></strong>
+            <% if (ri.itemCustomNote) { %>
+              <div style="font-size: 0.78rem; color: #64748b;"><%= ri.itemCustomNote %></div>
+            <% } %>
+          </td>
+          <td><%= ri.item.category %></td>
+          <td><%= ri.item.size %></td>
+          <td style="text-align: right; font-weight: 700;"><%= formatRupiah(ri.priceAtRent) %></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+
+  <!-- Perhitungan Total -->
+  <div class="invoice-total-row">
+    <div class="invoice-total-box">
+      <div class="invoice-total-item">
+        <span>Total Tarif Busana:</span>
+        <strong><%= formatRupiah(rental.totalBasePrice) %></strong>
+      </div>
+      <% if (rental.additionalCharge > 0) { %>
+        <div class="invoice-total-item">
+          <span>Biaya Tambahan (Charge):</span>
+          <span>+ <%= formatRupiah(rental.additionalCharge) %></span>
+        </div>
+      <% } %>
+      <% if (rental.discount > 0) { %>
+        <div class="invoice-total-item" style="color: #059669;">
+          <span>Potongan Diskon:</span>
+          <span>- <%= formatRupiah(rental.discount) %></span>
+        </div>
+      <% } %>
+      <div class="invoice-total-item grand">
+        <span>Total Akhir Tagihan:</span>
+        <span><%= formatRupiah(rental.finalPrice) %></span>
+      </div>
+      <div class="invoice-total-item" style="margin-top: 0.5rem; color: #0f172a;">
+        <span>Sudah Dibayar (<%= rental.paymentMethod %>):</span>
+        <strong style="color: #059669;"><%= formatRupiah(rental.paidAmount) %></strong>
+      </div>
+      <div class="invoice-total-item" style="color: <%= rental.remainingAmount > 0 ? '#dc2626;' : '#059669;' %> font-weight: 800;">
+        <span>Sisa Kekurangan:</span>
+        <span><%= formatRupiah(rental.remainingAmount) %></span>
+      </div>
+      <% if (rental.penaltyFee > 0) { %>
+        <div class="invoice-total-item" style="color: #dc2626; font-weight: 700; border-top: 1px dashed #cbd5e1; padding-top: 0.3rem;">
+          <span>Denda Telat Pengembalian:</span>
+          <span>+ <%= formatRupiah(rental.penaltyFee) %></span>
+        </div>
+      <% } %>
+    </div>
+  </div>
+
+  <!-- Aturan & Ketentuan Persewaan -->
+  <div style="margin-top: 2rem; border-top: 1px dashed #cbd5e1; padding-top: 1rem; font-size: 0.78rem; color: #64748b;">
+    <strong>Ketentuan Persewaan SEWA AJA:</strong>
+    <ol style="margin-left: 1.25rem; margin-top: 0.3rem;">
+      <li>Busana diambil pada tanggal <strong>H-1</strong> dan wajib dikembalikan paling lambat pada tanggal <strong>H+1</strong> pukul 17.00 WIB.</li>
+      <li>Keterlambatan pengembalian dikenakan denda proporsional sebesar Rp 25.000 per busana per hari.</li>
+      <li>Jaminan fisik (E-KTP / SIM) akan dikembalikan secara utuh setelah busana diperiksa dalam keadaan lengkap dan tidak rusak.</li>
+      <li>Pelunasan sisa tagihan wajib diselesaikan saat pengambilan busana di kasir.</li>
+    </ol>
+  </div>
+
+  <div style="display: flex; justify-content: space-between; margin-top: 3rem; text-align: center; font-size: 0.85rem;">
+    <div style="width: 200px;">
+      <p>Penyewa Busana,</p>
+      <br><br><br>
+      <p style="border-top: 1px solid #94a3b8; font-weight: 700;"><%= rental.customer.name %></p>
+    </div>
+    <div style="width: 200px;">
+      <p>Petugas Kasir,</p>
+      <br><br><br>
+      <p style="border-top: 1px solid #94a3b8; font-weight: 700;"><%= rental.cashierName %></p>
+    </div>
+  </div>
+</div>
+
+<!-- Data JSON Transaksi untuk ESC/POS Bluetooth Generator -->
+<script id="rentalDataJson" type="application/json">
+  <%- JSON.stringify({
+    transactionCode: rental.transactionCode,
+    date: formatDate(rental.createdAt),
+    cashierName: rental.cashierName,
+    paymentType: rental.paymentType,
+    rentalStatus: rental.rentalStatus,
+    customerName: rental.customer.name,
+    customerPhone: rental.customer.phone,
+    guarantee: rental.customerGuarantee + (rental.customer.idCardNumber ? ' (' + rental.customer.idCardNumber + ')' : ''),
+    pickupDate: formatDate(rental.pickupDate),
+    eventDate: formatDate(rental.eventDate),
+    returnDate: formatDate(rental.returnDate),
+    items: rental.rentalItems.map(ri => ({
+      name: ri.item.name,
+      code: ri.item.code,
+      size: ri.item.size,
+      price: ri.priceAtRent,
+      note: ri.itemCustomNote || ''
+    })),
+    totalBasePrice: rental.totalBasePrice,
+    additionalCharge: rental.additionalCharge,
+    discount: rental.discount,
+    finalPrice: rental.finalPrice,
+    paidAmount: rental.paidAmount,
+    remainingAmount: rental.remainingAmount,
+    penaltyFee: rental.penaltyFee,
+    paymentMethod: rental.paymentMethod,
+    fittingNotes: rental.fittingNotes || ''
+  }) %>
+</script>
+
+<script src="/js/thermal-bluetooth.js"></script>
+
+<%- include('../partials/footer') %>

@@ -1,0 +1,115 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  PROJECT_MANAGER
+  SISWA_TEKNISI
+}
+
+enum ServiceCategory {
+  WEB
+  JARINGAN
+  DESAIN
+  HARDWARE
+}
+
+enum OrderStatus {
+  PENDING
+  DALAM_PENGERJAAN
+  SELESAI
+  BATAL
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  REVIEW
+  DONE
+}
+
+enum HonorStatus {
+  PENDING
+  CAIR
+}
+
+model User {
+  id          Int           @id @default(autoincrement())
+  username    String        @unique
+  password    String
+  nama        String
+  role        Role
+  nisn        String?
+  telepon     String?
+  tasks       ProjectTask[] @relation("StudentTasks")
+  mentored    ProjectTask[] @relation("MentorTasks")
+  honorariums Honorarium[]
+  createdAt   DateTime      @default(now())
+}
+
+model Service {
+  id           Int             @id @default(autoincrement())
+  namaLayanan  String
+  kategori     ServiceCategory
+  hargaDasar   Int
+  estimasiHari Int
+  active       Boolean         @default(true)
+  orders       ProjectOrder[]
+  createdAt    DateTime        @default(now())
+}
+
+model ProjectOrder {
+  id           Int           @id @default(autoincrement())
+  nomorOrder   String        @unique
+  namaKlien    String
+  kontakKlien  String
+  serviceId    Int
+  service      Service       @relation(fields: [serviceId], references: [id])
+  totalBiaya   Int
+  tglMasuk     DateTime      @default(now())
+  deadline     DateTime
+  status       OrderStatus   @default(PENDING)
+  tasks        ProjectTask[]
+  createdAt    DateTime      @default(now())
+}
+
+model ProjectTask {
+  id            Int         @id @default(autoincrement())
+  orderId       Int
+  order         ProjectOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  studentId     Int
+  student       User        @relation("StudentTasks", fields: [studentId], references: [id])
+  mentorId      Int
+  mentor        User        @relation("MentorTasks", fields: [mentorId], references: [id])
+  judulTugas    String
+  deskripsi     String
+  statusKanban  TaskStatus  @default(TODO)
+  buktiHasilUrl String?
+  catatanRevisi String?
+  honorarium    Honorarium?
+  createdAt     DateTime    @default(now())
+}
+
+model Honorarium {
+  id           Int        @id @default(autoincrement())
+  taskId       Int        @unique
+  task         ProjectTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  studentId    Int
+  student      User       @relation(fields: [studentId], references: [id])
+  nominalHonor Int
+  statusBayar  HonorStatus @default(PENDING)
+  tglCair      DateTime?
+  createdAt    DateTime   @default(now())
+}
+
+model TeFaSetting {
+  id                 Int @id @default(1)
+  persentaseSiswa    Int @default(60)
+  persentaseKas      Int @default(40)
+}

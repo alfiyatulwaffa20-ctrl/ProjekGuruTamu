@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title><%= documentType %> · <%= order.nomorOrder %></title>
+  <link rel="stylesheet" href="/css/tailwind.css">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="document-page">
+  <div class="document-actions">
+    <a href="/">← Kembali ke dashboard</a>
+    <button class="button button-primary" onclick="window.print()">Cetak dokumen ↗</button>
+  </div>
+  <main class="official-document">
+    <header class="document-head">
+      <div class="document-brand">
+        <span class="brand-mark">T<span>.</span></span>
+        <div><b>UNIT PRODUKSI TEACHING FACTORY</b><small>SMK TELKOM LAMPUNG · BANDAR LAMPUNG</small></div>
+      </div>
+      <span class="document-status status <%= order.status === 'SELESAI' ? 'status-done' : 'status-progress' %>"><%= order.status.replace('_', ' ') %></span>
+    </header>
+    <div class="document-rule"></div>
+    <div class="document-title">
+      <span>DOKUMEN RESMI UNIT PRODUKSI</span>
+      <h1><%= documentType %></h1>
+      <p>No. <%= order.nomorOrder %></p>
+    </div>
+    <% if (documentType.includes('Invoice')) { %>
+      <div class="invoice-parties">
+        <div><small>DITERBITKAN KEPADA</small><b><%= order.namaKlien %></b><span><%= order.kontakKlien %></span></div>
+        <div><small>TANGGAL ORDER</small><b><%= formatDate(order.tglMasuk) %></b><span>Jatuh tempo: <%= formatDate(order.deadline) %></span></div>
+      </div>
+      <table class="document-table">
+        <thead><tr><th>DESKRIPSI PEKERJAAN</th><th>QTY</th><th>JUMLAH</th></tr></thead>
+        <tbody><tr><td><b><%= order.service.namaLayanan %></b><small class="cell-sub">Kategori <%= order.service.kategori %> · dikerjakan oleh tim siswa TeFa</small></td><td>1</td><td><%= formatRupiah(order.totalBiaya) %></td></tr></tbody>
+      </table>
+      <div class="invoice-total"><span>TOTAL TAGIHAN</span><b><%= formatRupiah(order.totalBiaya) %></b></div>
+      <div class="payment-note"><b>Terbilang</b><p><%= terbilang %></p><small>Dokumen ini merupakan invoice resmi Unit Produksi Teaching Factory.</small></div>
+    <% } else { %>
+      <p class="ba-intro">Pada hari ini, <%= formatDate(new Date()) %>, Unit Produksi Teaching Factory SMK Telkom Lampung telah menyelesaikan dan menyerahkan hasil pekerjaan kepada:</p>
+      <div class="ba-client"><small>NAMA KLIEN / INSTANSI</small><b><%= order.namaKlien %></b><span><%= order.kontakKlien %></span></div>
+      <div class="ba-work">
+        <small>PEKERJAAN YANG DISERAHKAN</small>
+        <b><%= order.service.namaLayanan %></b>
+        <p>Nomor order <%= order.nomorOrder %>. Hasil pekerjaan telah melalui proses pemeriksaan dan disetujui oleh pembimbing.</p>
+        <ul><% order.tasks.forEach((task) => { %><li><%= task.judulTugas %> — <%= task.student.nama %></li><% }) %></ul>
+      </div>
+      <div class="ba-value"><span>Nilai pekerjaan</span><b><%= formatRupiah(order.totalBiaya) %></b></div>
+    <% } %>
+    <div class="document-signatures">
+      <div><span>PIHAK KLIEN</span><div></div><b><%= order.namaKlien %></b></div>
+      <div><span>PROJECT MANAGER</span><div></div><b>Unit Produksi TeFa</b></div>
+    </div>
+    <footer class="document-footer">TEFA STUDIO <span>•</span> SMK TELKOM LAMPUNG <span>•</span> <%= order.nomorOrder %></footer>
+  </main>
+  <script>if (new URLSearchParams(location.search).has('print')) window.print();</script>
+</body>
+</html>

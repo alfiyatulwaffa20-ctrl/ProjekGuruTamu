@@ -1,0 +1,118 @@
+<%- include('../partials/header') %>
+
+<div class="page-header">
+  <div class="page-title">
+    <h2>✏️ Edit Koleksi Busana: <%= item.name %></h2>
+    <p>Perbarui informasi tarif sewa, status, atau deskripsi busana.</p>
+  </div>
+  <div>
+    <a href="/items" class="btn btn-secondary">
+      ⬅️ Kembali ke Katalog
+    </a>
+  </div>
+</div>
+
+<% if (error) { %>
+  <div class="alert alert-danger">
+    ⚠️ <%= error %>
+  </div>
+<% } %>
+
+<div class="card" style="max-width: 800px; margin: 0 auto;">
+  <form action="/items/edit/<%= item.id %>" method="POST">
+    <div class="form-grid">
+      <!-- Kode Busana -->
+      <div class="form-group">
+        <label class="form-label">Kode Busana <span class="req">*</span></label>
+        <input 
+          type="text" 
+          name="code" 
+          class="form-control" 
+          required 
+          value="<%= item.code %>"
+          style="text-transform: uppercase;"
+        >
+      </div>
+
+      <!-- Nama Busana -->
+      <div class="form-group">
+        <label class="form-label">Nama Busana <span class="req">*</span></label>
+        <input 
+          type="text" 
+          name="name" 
+          class="form-control" 
+          required
+          value="<%= item.name %>"
+        >
+      </div>
+
+      <!-- Kategori -->
+      <div class="form-group">
+        <label class="form-label">Kategori <span class="req">*</span></label>
+        <select name="category" class="form-control" required>
+          <option value="Kebaya" <%= item.category === 'Kebaya' ? 'selected' : '' %>>Kebaya</option>
+          <option value="Jas Formal" <%= item.category === 'Jas Formal' ? 'selected' : '' %>>Jas Formal</option>
+          <option value="Gaun Pengantin" <%= item.category === 'Gaun Pengantin' ? 'selected' : '' %>>Gaun Pengantin</option>
+          <option value="Beskap Adat" <%= item.category === 'Beskap Adat' ? 'selected' : '' %>>Beskap Adat</option>
+          <option value="Aksesoris" <%= item.category === 'Aksesoris' ? 'selected' : '' %>>Aksesoris</option>
+        </select>
+      </div>
+
+      <!-- Ukuran -->
+      <div class="form-group">
+        <label class="form-label">Ukuran (Size) <span class="req">*</span></label>
+        <select name="size" class="form-control" required>
+          <option value="All Size" <%= item.size === 'All Size' ? 'selected' : '' %>>All Size</option>
+          <option value="S" <%= item.size === 'S' ? 'selected' : '' %>>Size S</option>
+          <option value="M" <%= item.size === 'M' ? 'selected' : '' %>>Size M</option>
+          <option value="L" <%= item.size === 'L' ? 'selected' : '' %>>Size L</option>
+          <option value="XL" <%= item.size === 'XL' ? 'selected' : '' %>>Size XL</option>
+          <option value="XXL" <%= item.size === 'XXL' ? 'selected' : '' %>>Size XXL</option>
+        </select>
+      </div>
+
+      <!-- Harga Sewa -->
+      <div class="form-group">
+        <label class="form-label">Tarif Sewa / Hari (Rp) <span class="req">*</span></label>
+        <input 
+          type="number" 
+          name="rentalPrice" 
+          class="form-control" 
+          min="10000" 
+          step="5000" 
+          required
+          value="<%= item.rentalPrice %>"
+        >
+      </div>
+
+      <!-- Status Busana -->
+      <div class="form-group">
+        <label class="form-label">Status Ketersediaan <span class="req">*</span></label>
+        <select name="status" class="form-control" required>
+          <option value="AVAILABLE" <%= item.status === 'AVAILABLE' ? 'selected' : '' %>>Tersedia (Ready di Toko)</option>
+          <option value="RENTED" <%= item.status === 'RENTED' ? 'selected' : '' %>>Sedang Disewa Pelanggan</option>
+          <option value="LAUNDRY" <%= item.status === 'LAUNDRY' ? 'selected' : '' %>>Sedang Laundry / Perawatan</option>
+          <option value="MAINTENANCE" <%= item.status === 'MAINTENANCE' ? 'selected' : '' %>>Perbaikan / Jahit Vermak</option>
+        </select>
+      </div>
+
+      <!-- Deskripsi -->
+      <div class="form-group full-width">
+        <label class="form-label">Deskripsi & Keterangan Busana</label>
+        <textarea 
+          name="description" 
+          class="form-control"
+        ><%= item.description || '' %></textarea>
+      </div>
+    </div>
+
+    <div style="margin-top: 1.5rem; display: flex; justify-content: flex-end; gap: 0.75rem;">
+      <a href="/items" class="btn btn-secondary">Batal</a>
+      <button type="submit" class="btn btn-primary">
+        💾 Simpan Perubahan
+      </button>
+    </div>
+  </form>
+</div>
+
+<%- include('../partials/footer') %>
